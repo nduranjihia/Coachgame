@@ -208,7 +208,7 @@ export default function PhoneApp() {
 
   // 6. Home, stats and settings, with the bottom nav.
   return (
-    <>
+    <div className="cc-phone-shell">
       {tabScreen}
       <nav
         className="flex shrink-0 items-stretch"
@@ -234,6 +234,6 @@ export default function PhoneApp() {
         })}
       </nav>
       <Toast />
-    </>
+    </div>
   );
 }

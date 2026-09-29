@@ -70,7 +70,7 @@ export default function EnterCode({ onSubmit }: { onSubmit: (code: string) => vo
           </p>
         </div>
 
-        <div className="flex justify-between gap-2">
+        <div className="grid w-full grid-cols-6 gap-2">
           {codeSlots(code).map((ch, i) => (
             <motion.input
               key={i}
@@ -90,9 +90,10 @@ export default function EnterCode({ onSubmit }: { onSubmit: (code: string) => vo
               aria-label={`Code character ${i + 1}`}
               className="font-display text-center"
               style={{
-                width: 56,
-                height: 68,
-                fontSize: 32,
+                width: '100%',
+                minWidth: 0,
+                height: 'clamp(52px, 17vw, 68px)',
+                fontSize: 'clamp(20px, 8vw, 32px)',
                 color: 'var(--ink)',
                 background: 'var(--bg-2)',
                 border: `2px solid ${ch ? 'var(--sun)' : 'var(--line)'}`,
