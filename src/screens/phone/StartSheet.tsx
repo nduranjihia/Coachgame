@@ -25,6 +25,7 @@ export default function StartSheet({ game, onClose, send, activeMatch }: StartSh
   const online = useSession((s) => s.onlinePlayerIds);
   const [picked, setPicked] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const onlineSet = useMemo(() => new Set(online), [online]);
   const others = players.filter((p) => p.id !== me?.id);
@@ -40,6 +41,16 @@ export default function StartSheet({ game, onClose, send, activeMatch }: StartSh
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game]);
 
+  // Closing the sheet clears the confirm so the next tap does not open a
+  // stale "end the running game?" prompt.
+  useEffect(() => {
+    if (!game) setConfirming(false);
+  }, [game]);
+
+  // No hooks below this line. The early return is a branch, and a hook that
+  // only runs on one side of a branch is what tears the whole phone app down
+  // with "Rendered more hooks than during the previous render" the first time
+  // somebody taps a game tile.
   if (!game) return null;
   const meta = getGame(game);
   const title = `Play ${meta.label}`;
@@ -51,11 +62,6 @@ export default function StartSheet({ game, onClose, send, activeMatch }: StartSh
   // this never rides on a single tap: the button opens a confirm sheet, and
   // only the confirmation sends `replace`.
   const blocking = Boolean(activeMatch);
-  const [confirming, setConfirming] = useState(false);
-
-  useEffect(() => {
-    if (!game) setConfirming(false);
-  }, [game]);
 
   const toggle = (p: Player): void => {
     if (isCards) {

@@ -79,6 +79,53 @@ describe('bindThenSubscribe', () => {
     spy.mockRestore();
   });
 
+  // The bug this pins: `bind` and `attach` shared one try/catch, so an optional
+  // binder throwing (presence, hand, command listeners) skipped `attach` as well.
+  // The core `households`/`players`/`matches` listeners were then never bound and
+  // the app went deaf to every state change while still looking correctly synced.
+  it('still attaches the core listeners when an optional binder throws', () => {
+    const fake = new FakeChannel();
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    bindThenSubscribe(
+      cast(fake),
+      () => {
+        throw new Error('presence binder exploded');
+      },
+      (channel) => {
+        channel.on('postgres_changes', { event: '*', schema: 'public', table: 'matches' }, () => {});
+        channel.on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, () => {});
+      },
+      () => {},
+    );
+
+    expect(fake.onCalls).toEqual(['postgres_changes', 'postgres_changes']);
+    expect(fake.bindingsAtSubscribe).toEqual([2]);
+    spy.mockRestore();
+  });
+
+  it('does not let a throwing attach skip the optional binders', () => {
+    const fake = new FakeChannel();
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect(() =>
+      bindThenSubscribe(
+        cast(fake),
+        (channel) => {
+          channel.on('presence', { event: 'sync' }, () => {});
+        },
+        () => {
+          throw new Error('attach exploded');
+        },
+        () => {},
+      ),
+    ).not.toThrow();
+
+    expect(fake.onCalls).toEqual(['presence']);
+    expect(fake.bindingsAtSubscribe).toEqual([1]);
+    spy.mockRestore();
+  });
+
   it('still subscribes when there is nothing to bind', () => {
     const fake = new FakeChannel();
     bindThenSubscribe(cast(fake), undefined, () => {}, () => {});

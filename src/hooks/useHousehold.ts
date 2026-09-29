@@ -102,21 +102,38 @@ export function useHousehold(role: 'tv' | 'phone', uid: string | null, hooks: Ho
   }, []);
 
   const startChannel = useCallback(
-    (id: string) => {
-      if (channelRef.current) {
-        void supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
+    async (id: string) => {
+      const previous = channelRef.current;
+      channelRef.current = null;
       setChannel(null);
+
+      // `supabase.channel(topic)` hands back the channel that is *already
+      // registered* for that topic, and `RealtimeChannel.subscribe()` does nothing
+      // unless the channel is closed. `removeChannel` is asynchronous - the old
+      // channel only leaves the client's channel list once its leave is
+      // acknowledged - so asking for a replacement before that settles returns the
+      // half-torn-down channel and the join is silently skipped. The app then looks
+      // healthy but never hears another row change, which is exactly the "the
+      // board only updates when I reload" symptom.
+      if (previous) {
+        await supabase.removeChannel(previous);
+      }
 
       const next = supabase.channel(`hh:${id}`);
       const scope = `household_id=eq.${id}`;
+      // `households` is the one table keyed by `id`; every other table this hook
+      // listens to carries `household_id`. Filtering it by `household_id` names a
+      // column that does not exist, and Realtime answers an unresolvable filter by
+      // silently dropping *every* postgres_changes event for the whole channel - no
+      // CHANNEL_ERROR, the subscription still reports SUBSCRIBED with an id. The
+      // phone then never hears about a move and the board only refreshes on reload.
+      const householdScope = `id=eq.${id}`;
 
       bindThenSubscribe(
         next,
         bindRef.current,
         (ch) => {
-          ch.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'households', filter: scope }, () => {
+          ch.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'households', filter: householdScope }, () => {
             void refetch();
           });
           ch.on('postgres_changes', { event: '*', schema: 'public', table: 'players', filter: scope }, () => {
@@ -132,6 +149,10 @@ export function useHousehold(role: 'tv' | 'phone', uid: string | null, hooks: Ho
             // Safety net: refetch everything after every (re)connect.
             void refetch();
             void matchEventRef.current?.();
+          } else if (status !== 'CLOSED') {
+            // A channel that never joins is indistinguishable from a quiet TV, so
+            // make it loud in the console rather than a mystery to debug later.
+            console.warn(`[couch-clash] household channel ${status}`, { householdId: id });
           }
         },
       );
@@ -189,7 +210,7 @@ export function useHousehold(role: 'tv' | 'phone', uid: string | null, hooks: Ho
       const row = data as Household;
       setHousehold({ ...row, settings: settingsOrDefaults(row.settings) });
       await fetchPlayers(id);
-      startChannel(id);
+      await startChannel(id);
     } finally {
       setLoading(false);
     }

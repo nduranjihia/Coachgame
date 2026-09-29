@@ -16,6 +16,11 @@ export type ChannelBinder = (channel: RealtimeChannel) => void;
  *
  * A binder that throws is logged and skipped rather than allowed to take the
  * screen down - a dead presence feed is recoverable, a blank television is not.
+ * `bind` and `attach` are guarded separately for the same reason: the optional
+ * binders belong to individual features, while `attach` owns the core
+ * `households`/`players`/`matches` listeners. Letting one broken binder skip
+ * `attach` would deafen the app to every state change while it still looked
+ * perfectly synced.
  */
 export function bindThenSubscribe(
   channel: RealtimeChannel,
@@ -25,9 +30,13 @@ export function bindThenSubscribe(
 ): void {
   try {
     bind?.(channel);
+  } catch (cause) {
+    console.error('[couch-clash] channel binder failed', cause);
+  }
+  try {
     attach(channel);
   } catch (cause) {
-    console.error('[couch-clash] channel binding failed', cause);
+    console.error('[couch-clash] channel attach failed', cause);
   }
   channel.subscribe(onStatus);
 }
