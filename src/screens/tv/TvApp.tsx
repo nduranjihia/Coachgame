@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { useActiveMatch } from '@/hooks/useActiveMatch';
 import { useCommandProcessor } from '@/hooks/useCommandProcessor';
 import { useHousehold } from '@/hooks/useHousehold';
@@ -17,6 +18,7 @@ import TvMatch from './TvMatch';
 import TvOffline from './TvOffline';
 import TvPairing from './TvPairing';
 import TvResult from './TvResult';
+import TvTrouble from './TvTrouble';
 
 /** The seat whose turn it is, whatever the game. */
 function turnSeat(match: Match): string | null {
@@ -52,18 +54,28 @@ export default function TvApp() {
   const onMatchEvent = useCallback(() => void match.reload(), [match]);
   const onChannelStatus = useCallback((next: string) => setStatus(next), []);
 
-  const { channel, bootstrap } = useHousehold('tv', uid, { onMatchEvent, onChannelStatus });
-  const ready = Boolean(householdId && channel);
-
-  usePresence({ channel, role: 'tv', uid, myPlayerId: null, ready });
-  useCommandProcessor({
+  // Listeners are declared before the channel exists: `useHousehold` applies
+  // them to the fresh channel immediately before it calls `subscribe()`.
+  const bindPresence = usePresence({ role: 'tv', uid });
+  const bindCommands = useCommandProcessor({
     householdId,
-    channel,
-    ready,
     onCommitted: useCallback(() => {
       sfxTap(soundOn);
       void match.reload();
     }, [match, soundOn]),
+  });
+  const bind = useCallback(
+    (channel: RealtimeChannel) => {
+      bindPresence(channel);
+      bindCommands(channel);
+    },
+    [bindPresence, bindCommands],
+  );
+
+  const { bootstrap, error: homeError, retry } = useHousehold('tv', uid, {
+    onMatchEvent,
+    onChannelStatus,
+    bind,
   });
 
   // Records are shown on the game cards and on the result overlay.
@@ -133,7 +145,9 @@ export default function TvApp() {
   const code = household?.join_code ?? '';
 
   let screen = <TvBoot />;
-  if (household && !loading) {
+  if (homeError) {
+    screen = <TvTrouble message={homeError} onRetry={() => void retry()} />;
+  } else if (household && !loading) {
     if (players.length === 0) {
       screen = <TvPairing code={code} players={players} />;
     } else if (activeMatch) {

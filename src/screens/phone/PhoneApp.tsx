@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BarChart3, Home, Settings as SettingsIcon } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import Toast from '@/components/Toast';
 import { useActiveMatch } from '@/hooks/useActiveMatch';
 import { useHousehold } from '@/hooks/useHousehold';
@@ -59,10 +60,15 @@ export default function PhoneApp() {
   const match = useActiveMatch(householdId);
   const stats = useStats(householdId);
   const onMatchEvent = useCallback(() => void match.reload(), [match]);
-  const { channel, bootstrap } = useHousehold('phone', uid, { onMatchEvent });
+
+  // Declared before the channel exists so `useHousehold` can apply them to the
+  // fresh channel before it calls `subscribe()`.
+  const bindPresence = usePresence({ role: 'phone', uid });
+  const bind = useCallback((channel: RealtimeChannel) => bindPresence(channel), [bindPresence]);
+
+  const { channel, bootstrap } = useHousehold('phone', uid, { onMatchEvent, bind });
   const ready = Boolean(householdId && channel);
 
-  usePresence({ channel, role: 'phone', uid, myPlayerId, ready });
   useMyHand({
     channel,
     householdId,

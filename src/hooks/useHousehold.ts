@@ -11,7 +11,20 @@ export interface HouseholdHooks {
   onMatchEvent?: () => void;
   /** Realtime channel status: SUBSCRIBED / CHANNEL_ERROR / TIMED_OUT / CLOSED. */
   onChannelStatus?: (status: string) => void;
+  /**
+   * Extra listeners for the shared channel, run inside `startChannel` *before*
+   * `subscribe()`.
+   *
+   * Supabase throws for `presence` and `postgres_changes` bindings added after
+   * the channel has joined or started joining, so these cannot be attached from
+   * an effect on the `channel` value - by the time a component sees it, the
+   * channel is already subscribed. They are declared here instead.
+   */
+  bind?: ChannelBinder;
 }
+
+/** Attaches listeners to a channel that has not been subscribed to yet. */
+export type ChannelBinder = (channel: RealtimeChannel) => void;
 
 export interface HouseholdApi {
   /** Load household + players and (re)start the realtime subscriptions. */
@@ -20,6 +33,10 @@ export interface HouseholdApi {
   reload: () => Promise<void>;
   /** The shared `hh:<id>` channel, or `null` until the household is known. */
   channel: RealtimeChannel | null;
+  /** Why the last bootstrap gave up, or `null` while it has not. */
+  error: string | null;
+  /** Try the last failed bootstrap again. */
+  retry: () => Promise<void>;
 }
 
 function settingsOrDefaults(raw: unknown): Household['settings'] {
@@ -40,12 +57,16 @@ export function useHousehold(role: 'tv' | 'phone', uid: string | null, hooks: Ho
   const markHomeGone = useSession((s) => s.markHomeGone);
 
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const bootstrapped = useRef(false);
   const matchEventRef = useRef(hooks.onMatchEvent);
   matchEventRef.current = hooks.onMatchEvent;
   const statusRef = useRef(hooks.onChannelStatus);
   statusRef.current = hooks.onChannelStatus;
+  // Kept in a ref so a new binder identity never re-subscribes the channel.
+  const bindRef = useRef<ChannelBinder | undefined>(hooks.bind);
+  bindRef.current = hooks.bind;
 
   const fetchPlayers = useCallback(
     async (id: string) => {
@@ -98,19 +119,26 @@ export function useHousehold(role: 'tv' | 'phone', uid: string | null, hooks: Ho
       const next = supabase.channel(`hh:${id}`);
       const scope = `household_id=eq.${id}`;
 
-      next.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'households', filter: scope }, () => {
-        void refetch();
-      });
-      next.on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'players', filter: scope },
-        () => {
-          void fetchPlayers(id);
-        },
-      );
-      next.on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: scope }, () => {
-        void matchEventRef.current?.();
-      });
+      // Order matters: everything is bound first, then one single `subscribe()`.
+      try {
+        bindRef.current?.(next);
+        next.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'households', filter: scope }, () => {
+          void refetch();
+        });
+        next.on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'players', filter: scope },
+          () => {
+            void fetchPlayers(id);
+          },
+        );
+        next.on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: scope }, () => {
+          void matchEventRef.current?.();
+        });
+      } catch (cause) {
+        // A binder that throws must not take the whole screen down with it.
+        console.error('[couch-clash] channel binding failed', cause);
+      }
 
       next.subscribe((status) => {
         statusRef.current?.(status);
@@ -130,6 +158,7 @@ export function useHousehold(role: 'tv' | 'phone', uid: string | null, hooks: Ho
     const authUid = uid;
     if (!authUid) return;
     setLoading(true);
+    setError(null);
     try {
       const store = useSession.getState();
       let id = store.householdId;
@@ -144,8 +173,9 @@ export function useHousehold(role: 'tv' | 'phone', uid: string | null, hooks: Ho
       }
 
       if (!id && role === 'tv') {
-        const { data, error } = await supabase.rpc('create_tv_household');
-        if (error || !data) {
+        const { data, error: rpcError } = await supabase.rpc('create_tv_household');
+        if (rpcError || !data) {
+          setError(rpcError ? `Could not create a home: ${rpcError.message}` : 'Could not create a home.');
           setLoading(false);
           return;
         }
@@ -156,16 +186,18 @@ export function useHousehold(role: 'tv' | 'phone', uid: string | null, hooks: Ho
       }
 
       if (!id) {
+        setError('This device is not part of a home yet.');
         setLoading(false);
         return;
       }
 
-      const { data, error } = await supabase
+      const { data, error: readError } = await supabase
         .from('households')
         .select('id, join_code, settings, created_at')
         .eq('id', id)
         .maybeSingle();
-      if (error || !data) {
+      if (readError || !data) {
+        setError(readError ? `Could not load your home: ${readError.message}` : 'Could not load your home.');
         setLoading(false);
         return;
       }
@@ -213,6 +245,8 @@ export function useHousehold(role: 'tv' | 'phone', uid: string | null, hooks: Ho
     refetch,
     reload,
     channel,
+    error,
+    retry: bootstrap,
   };
 }
 

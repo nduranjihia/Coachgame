@@ -109,12 +109,27 @@ These do **not** change behaviour, routes, tables, columns, commands or files.
 2. **TV Pairing shows four player slots, not the literal "two".** Wild Cards
    seats up to four players and the pairing screen is the live "who has joined"
    view.
-3. **Chess "insufficient material" is unit-tested at the predicate level**
-   (bare-kings FEN) rather than through a full-game replay. The engine path
-   (`isInsufficientMaterial()` → `result: 'insufficient'`) is implemented exactly
-   as specified.
-4. **Internal-only signatures** (no new features): optional `nameOf?` on
+3. **Internal-only signatures** (no new features): optional `nameOf?` on
    `EngineCtx` for human log lines; optional `rng` in the cards engine for
    deterministic tests; optional `QrTile.codeSize`; realtime `filter` uses the
    string form (`household_id=eq.<id>`) required by the current
    `@supabase/supabase-js@2` / `realtime-js`.
+
+---
+
+## 7. Chess rules coverage (complete)
+
+Every chess end condition in section 9 of the spec is exercised through the
+engine's real replay path, not just the chess.js predicates:
+
+- checkmate (fool's mate), stalemate, threefold repetition, draw by agreement,
+  resignation, promotion (default queen and explicit piece).
+- **insufficient material** now runs end to end. The test replays a real, legal
+  **16.5-move (33-ply) "bare kings" game** — Ponzetto's refinement of Sam Loyd's
+  classic problem (`src/games/chess/engine.test.ts`, `BARE_KINGS_LINE`) — and
+  asserts the engine finishes with `result: 'insufficient'`, `winnerId: null`, the exact final FEN
+  `8/4k3/8/8/8/8/5K2/8 b - - 0 17` and 30 captured pieces (kings excluded). A
+  companion test stops two plies short and asserts the game is still `active`, so
+  the branch cannot fire early. Source:
+  <https://chess.stackexchange.com/questions/18258/fastest-king-vs-king-endgame>
+  (the line was verified move-by-move with the installed `chess.js@1.4.0`).

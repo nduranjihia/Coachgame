@@ -1,13 +1,11 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { useSession } from '@/store/session';
+import type { ChannelBinder } from './useHousehold';
 
 export interface PresenceOptions {
-  channel: RealtimeChannel | null;
   role: 'tv' | 'phone';
   uid: string | null;
-  myPlayerId: string | null;
-  ready: boolean;
 }
 
 interface PresenceEntry {
@@ -29,52 +27,65 @@ function collect(entries: PresenceEntry[]): { players: string[]; tv: boolean } {
  * Section 6.6. Shares the `hh:<id>` channel with `useHousehold`: the presence
  * key is the device's auth uid, tracked as `{kind:'tv'}` or
  * `{kind:'phone', playerId}`.
+ *
+ * Returns a binder rather than listening to the channel itself. Supabase throws
+ * on `presence` bindings added after `subscribe()`, and the channel is already
+ * subscribed by the time any component can see it - an effect that reacted to
+ * it would crash the app. The binder is applied inside `startChannel` instead.
  */
-export function usePresence({ channel, role, uid, myPlayerId, ready }: PresenceOptions): void {
+export function usePresence({ role, uid }: PresenceOptions): ChannelBinder {
   const setPresence = useSession((s) => s.setPresence);
-  const myPlayerIdRef = useRef(myPlayerId);
-  myPlayerIdRef.current = myPlayerId;
+  const channelRef = useRef<RealtimeChannel | null>(null);
+
+  /** Announce this device. Safe to repeat: it upserts the same presence key. */
+  const track = useCallback((): void => {
+    const channel = channelRef.current;
+    if (!channel || !uid) return;
+    const payload: PresenceEntry =
+      role === 'tv' ? { kind: 'tv' } : { kind: 'phone', playerId: useSession.getState().myPlayerId };
+    void channel.track(payload, { uid }).catch(() => undefined);
+  }, [role, uid]);
+
+  const read = useCallback((): void => {
+    const channel = channelRef.current;
+    if (!channel) return;
+    const state = channel.presenceState<PresenceEntry>();
+    const entries: PresenceEntry[] = [];
+    for (const key of Object.keys(state)) {
+      for (const meta of state[key]) if (meta) entries.push(meta);
+    }
+    const { players, tv } = collect(entries);
+    setPresence(players, tv);
+  }, [setPresence]);
 
   useEffect(() => {
-    if (!ready || !channel || !uid) return undefined;
-    let cancelled = false;
-
-    const read = (): void => {
-      if (cancelled) return;
-      const state = channel.presenceState<PresenceEntry>();
-      const entries: PresenceEntry[] = [];
-      for (const key of Object.keys(state)) {
-        for (const meta of state[key]) if (meta) entries.push(meta);
-      }
-      const { players, tv } = collect(entries);
-      setPresence(players, tv);
-    };
-
-    const trackSelf = (): void => {
-      const payload: PresenceEntry =
-        role === 'tv' ? { kind: 'tv' } : { kind: 'phone', playerId: myPlayerIdRef.current };
-      void channel.track(payload, { uid }).catch(() => undefined);
-    };
-
-    channel.on('presence', { event: 'sync' }, read);
-    channel.on('presence', { event: 'join' }, read);
-    channel.on('presence', { event: 'leave' }, read);
-    trackSelf();
-    read();
-
     const onVisible = (): void => {
-      if (document.visibilityState === 'visible') {
-        read();
-        trackSelf();
-      }
+      if (document.visibilityState !== 'visible') return;
+      // Coming back from a suspend: re-announce and re-read, because the
+      // server drops presence for a client that was away.
+      read();
+      track();
     };
     document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [read, track]);
 
-    return () => {
-      cancelled = true;
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, [channel, ready, role, setPresence, uid]);
+  return useCallback<ChannelBinder>(
+    (channel) => {
+      channelRef.current = channel;
+
+      // `sync` is the only event that is guaranteed to arrive after a join or
+      // a reconnect, and the channel is only pushable once it has joined - so
+      // this is where the device announces itself.
+      channel.on('presence', { event: 'sync' }, () => {
+        read();
+        track();
+      });
+      channel.on('presence', { event: 'join' }, read);
+      channel.on('presence', { event: 'leave' }, read);
+    },
+    [read, track],
+  );
 }
 
 export default usePresence;

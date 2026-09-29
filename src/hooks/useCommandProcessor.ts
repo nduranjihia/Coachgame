@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef } from 'react';
-import type { RealtimeChannel } from '@supabase/supabase-js';
 import { COMMAND_POLL_MS, COMMAND_STALE_MS } from '@/lib/constants';
 import { shuffle } from '@/lib/rng';
 import { rpcErrorCode, supabase } from '@/lib/supabase';
@@ -7,6 +6,7 @@ import { useSession } from '@/store/session';
 import { getEngine, getGame, isGameKey } from '@/games/registry';
 import type { Command, GameKey, Match } from '@/types/db';
 import type { Card, CardsSecrets } from '@/types/games';
+import type { ChannelBinder } from './useHousehold';
 
 const COMMAND_COLUMNS =
   'id, household_id, player_id, match_id, type, payload, status, reason, created_at';
@@ -19,8 +19,6 @@ interface Cache {
 
 export interface CommandProcessorOptions {
   householdId: string | null;
-  channel: RealtimeChannel | null;
-  ready: boolean;
   /** Called after every successful commit so the TV refetches its match. */
   onCommitted: () => void;
 }
@@ -33,13 +31,16 @@ function emptyCache(): Cache {
  * Section 8.3. Runs only in the TV role. Commands are handled one at a time in
  * ascending id order through a single async queue, so two quick taps can never
  * interleave.
+ *
+ * Returns a binder for the shared channel. `postgres_changes` listeners cannot
+ * be attached after `subscribe()`, so the realtime trigger is declared here and
+ * applied by `useHousehold` before it subscribes; the poll below is the safety
+ * net for when the socket is down.
  */
 export function useCommandProcessor({
   householdId,
-  channel,
-  ready,
   onCommitted,
-}: CommandProcessorOptions): void {
+}: CommandProcessorOptions): ChannelBinder {
   const running = useRef(false);
   const queued = useRef(false);
   const cache = useRef<Cache>(emptyCache());
@@ -283,7 +284,7 @@ export function useCommandProcessor({
   );
 
   const drain = useCallback(async (): Promise<void> => {
-    if (!ready || !householdId) return;
+    if (!householdId) return;
     if (running.current) {
       queued.current = true;
       return;
@@ -313,29 +314,22 @@ export function useCommandProcessor({
     } finally {
       running.current = false;
     }
-  }, [householdId, process, ready]);
+  }, [householdId, process]);
+
+  const onInsert = useCallback((): void => {
+    void drain();
+  }, [drain]);
 
   // Load the cached context once when the household becomes known.
   useEffect(() => {
-    if (!ready || !householdId) return;
+    if (!householdId) return;
     void reloadCache();
-  }, [householdId, ready, reloadCache]);
+  }, [householdId, reloadCache]);
 
-  // Realtime commands INSERT, plus the 5 second poll safety net.
+  // The 5 second poll safety net: it also covers a TV whose socket never
+  // connected, which the realtime trigger alone would not.
   useEffect(() => {
-    if (!ready || !householdId) return undefined;
-    const filter = `household_id=eq.${householdId}`;
-    const onInsert = (): void => {
-      void drain();
-    };
-    if (channel) {
-      channel.on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'commands', filter },
-        onInsert,
-      );
-    }
-
+    if (!householdId) return undefined;
     const timer = window.setInterval(() => {
       void drain();
     }, COMMAND_POLL_MS);
@@ -349,9 +343,19 @@ export function useCommandProcessor({
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [channel, drain, householdId, ready]);
+  }, [drain, householdId]);
 
-  return undefined;
+  return useCallback<ChannelBinder>(
+    (channel) => {
+      if (!householdId) return;
+      channel.on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'commands', filter: `household_id=eq.${householdId}` },
+        onInsert,
+      );
+    },
+    [householdId, onInsert],
+  );
 }
 
 export default useCommandProcessor;

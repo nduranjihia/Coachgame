@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { Chess } from 'chess.js';
 import { chessEngine, createInitialState, replay } from './engine';
 import type { ChessState, EngineCtx, EngineResult } from '@/types/games';
 import { DEFAULT_SETTINGS } from '@/types/db';
@@ -69,6 +68,47 @@ const STALEMATE_LINE: Seq = [
   ['b8', 'c8'],
   ['f7', 'g6'],
   ['c8', 'e6'],
+];
+
+/**
+ * A real, legal 16.5-move (33-ply) game — Ponzetto's refinement of Sam Loyd's
+ * "bare kings" problem — that trades every piece, leaving only the two kings.
+ * https://chess.stackexchange.com/questions/18258/fastest-king-vs-king-endgame
+ */
+const BARE_KINGS_LINE: Seq = [
+  ['e2', 'e4'],
+  ['d7', 'd5'],
+  ['e4', 'd5'],
+  ['d8', 'd5'],
+  ['f1', 'd3'],
+  ['d5', 'a2'],
+  ['d3', 'h7'],
+  ['a2', 'b1'],
+  ['h7', 'g8'],
+  ['b1', 'c2'],
+  ['g8', 'f7'],
+  ['e8', 'f7'],
+  ['a1', 'a7'],
+  ['c2', 'c1'],
+  ['a7', 'b7'],
+  ['h8', 'h2'],
+  ['b7', 'b8'],
+  ['h2', 'g2'],
+  ['d1', 'c1'],
+  ['g2', 'g1'],
+  ['h1', 'g1'],
+  ['a8', 'b8'],
+  ['c1', 'c7'],
+  ['b8', 'b2'],
+  ['c7', 'c8'],
+  ['b2', 'd2'],
+  ['c8', 'f8'],
+  ['f7', 'f8'],
+  ['g1', 'g7'],
+  ['d2', 'f2'],
+  ['g7', 'e7'],
+  ['f8', 'e7'],
+  ['e1', 'f2'],
 ];
 
 describe('chess engine', () => {
@@ -162,16 +202,31 @@ describe('chess engine', () => {
     expect(res.state.san[res.state.san.length - 1]).toBe('a8=N');
   });
 
-  it('detects insufficient material through the chess.js predicate the engine uses', () => {
-    // The engine delegates to `chess.isInsufficientMaterial()`; a bare-kings
-    // position is the canonical insufficient-material case.
-    const bare = new Chess();
-    bare.load('8/8/8/4k3/8/8/8/4K3 w - - 0 1');
-    expect(bare.isInsufficientMaterial()).toBe(true);
+  it('ends a real bare-kings game as an insufficient-material draw', () => {
+    // A full 16.5-move game that trades every piece down to only the two kings.
+    // This drives `insufficient` through the engine's real replay path rather
+    // than inspecting a static FEN.
+    const res = run(fresh(), BARE_KINGS_LINE);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.status).toBe('finished');
+    expect(res.result).toBe('insufficient');
+    expect(res.winnerId).toBeNull();
+    // Bare kings: two pieces left, so 30 of the original 32 were captured.
+    expect(res.state.fen).toBe('8/4k3/8/8/8/8/5K2/8 b - - 0 17');
+    expect(res.state.captured.w.length + res.state.captured.b.length).toBe(30);
+    expect(res.state.captured.w.filter((p) => p === 'k')).toEqual([]);
+    expect(res.state.captured.b.filter((p) => p === 'k')).toEqual([]);
+  });
 
-    const kq = new Chess();
-    kq.load('8/8/8/4k3/8/8/8/3QK3 w - - 0 1');
-    expect(kq.isInsufficientMaterial()).toBe(false);
+  it('does not flag insufficient material while material is still on the board', () => {
+    // Guard against the branch firing early: two plies short of the end the
+    // game must still be active (rooks are on the board).
+    const almost = run(fresh(), BARE_KINGS_LINE.slice(0, -2));
+    expect(almost.ok).toBe(true);
+    if (!almost.ok) return;
+    expect(almost.status).toBe('active');
+    expect(almost.result).toBeNull();
   });
 
   it('records captured pieces by the capturing colour', () => {
