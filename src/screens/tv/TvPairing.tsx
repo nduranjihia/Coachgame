@@ -1,10 +1,9 @@
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
 import Avatar from '@/components/Avatar';
 import QrTile from '@/components/QrTile';
 import { MAX_PLAYERS } from '@/lib/constants';
-import { setRole } from '@/lib/device';
 import type { Player } from '@/types/db';
+import TvControllerLink from './TvControllerLink';
 
 export interface TvPairingProps {
   code: string;
@@ -16,13 +15,6 @@ const STEPS = ['Point your camera at the code', 'Pick a name and a face', 'Choos
 
 /** Section 11.1 screen 2: the QR, the code and three friendly steps. */
 export default function TvPairing({ code, players }: TvPairingProps) {
-  const navigate = useNavigate();
-
-  const becomeController = (): void => {
-    setRole('phone');
-    navigate('/play', { replace: true });
-  };
-
   return (
     <div className="cc-tv-root">
       <div className="flex min-h-0 flex-1 items-center justify-center gap-[5vw]">
@@ -107,16 +99,7 @@ export default function TvPairing({ code, players }: TvPairingProps) {
         })}
       </div>
 
-      <div className="flex shrink-0 justify-center" style={{ paddingBottom: '0.5vh' }}>
-        <button
-          type="button"
-          onClick={becomeController}
-          className="font-body underline"
-          style={{ fontSize: '2.4vh', color: 'var(--ink-dim)', background: 'none', border: 0 }}
-        >
-          Not a TV? Use as a controller
-        </button>
-      </div>
+      <TvControllerLink />
     </div>
   );
 }

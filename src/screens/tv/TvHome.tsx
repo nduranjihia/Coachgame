@@ -1,14 +1,13 @@
 import { motion } from 'framer-motion';
 import { PlayCircle, Smartphone } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import PlayerChip from '@/components/PlayerChip';
 import QrTile from '@/components/QrTile';
 import { GameIcon, GAME_KEYS, getGame } from '@/games/registry';
 import { headToHead, type StatsByGame } from '@/hooks/useStats';
 import { MAX_PLAYERS } from '@/lib/constants';
-import { setRole } from '@/lib/device';
 import type { Match, Player } from '@/types/db';
 import type { CardsState, ChessState, TttState } from '@/types/games';
+import TvControllerLink from './TvControllerLink';
 
 export interface TvHomeProps {
   code: string;
@@ -35,13 +34,7 @@ function moveCount(match: Match): number {
 
 /** Section 11.1 screen 3: the lounge. Display only - every game starts on a phone. */
 export default function TvHome({ code, players, onlinePlayerIds, byGame, activeMatch }: TvHomeProps) {
-  const navigate = useNavigate();
   const online = new Set(onlinePlayerIds);
-
-  const becomeController = (): void => {
-    setRole('phone');
-    navigate('/play', { replace: true });
-  };
 
   const resumeNames = activeMatch
     ? activeMatch.seats
@@ -174,16 +167,7 @@ export default function TvHome({ code, players, onlinePlayerIds, byGame, activeM
         </div>
       ) : null}
 
-      <div className="flex shrink-0 justify-center" style={{ paddingTop: '1vh' }}>
-        <button
-          type="button"
-          onClick={becomeController}
-          className="font-body underline"
-          style={{ fontSize: '2.4vh', color: 'var(--ink-dim)', background: 'none', border: 0 }}
-        >
-          Not a TV? Use as a controller
-        </button>
-      </div>
+      <TvControllerLink />
     </div>
   );
 }

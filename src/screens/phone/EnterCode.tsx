@@ -1,13 +1,16 @@
 import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import Button from '@/components/Button';
 import StatusBar from '@/components/StatusBar';
 import { CODE_LENGTH } from '@/lib/constants';
 import { codeSlots, isValidCode, normaliseCode } from '@/lib/codes';
+import { setRole } from '@/lib/device';
 import { useMyPlayer, useSession } from '@/store/session';
 
 /** Section 6.4: six big single-character boxes, then the join flow. */
 export default function EnterCode({ onSubmit }: { onSubmit: (code: string) => void }) {
+  const navigate = useNavigate();
   const me = useMyPlayer();
   const tvOnline = useSession((s) => s.tvOnline);
   const [code, setCode] = useState('');
@@ -55,6 +58,13 @@ export default function EnterCode({ onSubmit }: { onSubmit: (code: string) => vo
     const next = normaliseCode(chars.join(''));
     setCode(next);
     if (next.length === CODE_LENGTH) submit(next);
+  };
+
+  // The way out for a TV that landed here by mistake: no on-screen keyboard,
+  // no remote-driven text entry, and no way back to the pairing code.
+  const becomeTV = (): void => {
+    setRole('tv');
+    navigate('/tv', { replace: true });
   };
 
   return (
@@ -112,6 +122,15 @@ export default function EnterCode({ onSubmit }: { onSubmit: (code: string) => vo
         <p className="font-body text-center text-[15px]" style={{ color: 'var(--ink-dim)' }}>
           Or point your camera at the QR code on the TV
         </p>
+
+        <button
+          type="button"
+          onClick={becomeTV}
+          className="font-body text-center underline"
+          style={{ fontSize: 14, color: 'var(--ink-dim)', background: 'none', border: 0 }}
+        >
+          Running this on the TV? Show the pairing code instead
+        </button>
       </div>
     </div>
   );
