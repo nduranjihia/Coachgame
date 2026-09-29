@@ -59,7 +59,7 @@ export default function TttPhoneBoard({
 }: TttPhoneBoardProps) {
   const [pendingCell, setPendingCell] = useState<number | null>(null);
 
-  // The pulse ends as soon as the board reflects the move (or the turn passes).
+  // The pending-state highlight clears as soon as the board reflects the move (or the turn passes).
   useEffect(() => {
     if (pendingCell === null) return;
     if (state.board[pendingCell] !== null || !myTurn) setPendingCell(null);
@@ -84,7 +84,7 @@ export default function TttPhoneBoard({
           const empty = mark === null;
           const isPending = pendingCell === i;
           return (
-            <motion.button
+            <button
               key={i}
               type="button"
               aria-label={`Square ${i + 1}`}
@@ -96,17 +96,22 @@ export default function TttPhoneBoard({
               className="flex items-center justify-center"
               style={{
                 borderRadius: 20,
-                background: 'var(--bg-2)',
+                background: isPending ? 'rgba(255,200,87,.16)' : 'var(--bg-2)',
                 border: '1px solid var(--line)',
-                boxShadow: '0 5px 0 rgba(0,0,0,.35)',
+                boxShadow: isPending
+                  ? 'inset 0 0 0 2px rgba(255,200,87,.75), 0 5px 0 rgba(0,0,0,.35)'
+                  : '0 5px 0 rgba(0,0,0,.35)',
                 cursor: interactive && empty ? 'pointer' : 'default',
                 opacity: interactive || !empty ? 1 : 0.65,
+                overflow: 'hidden',
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'transparent',
+                transition: 'background 140ms ease, box-shadow 140ms ease',
               }}
-              animate={isPending ? { scale: [1, 0.9, 1] } : { scale: 1 }}
-              transition={{ duration: 0.6, repeat: isPending ? Infinity : 0, ease: 'easeInOut' }}
+              aria-busy={isPending || undefined}
             >
               {mark ? <Mark mark={mark} dim={false} /> : null}
-            </motion.button>
+            </button>
           );
         })}
       </div>
