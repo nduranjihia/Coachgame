@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { COMMAND_POLL_MS, COMMAND_STALE_MS } from '@/lib/constants';
 import { shuffle } from '@/lib/rng';
 import { rpcErrorCode, supabase } from '@/lib/supabase';
+import { admitStartMatch } from '@/lib/startMatch';
 import { useSession } from '@/store/session';
 import { getEngine, getGame, isGameKey } from '@/games/registry';
 import type { Command, GameKey, Match } from '@/types/db';
@@ -219,17 +220,24 @@ export function useCommandProcessor({
 
       if (cmd.type === 'start_match') {
         const game = cmd.payload?.game as GameKey;
-        const seatsIn = Array.isArray(cmd.payload?.seats) ? (cmd.payload.seats as string[]) : [];
         if (!isGameKey(game)) return reject(cmd.id, 'bad_request');
         const meta = getGame(game);
-        if (seatsIn.length < meta.minPlayers || seatsIn.length > meta.maxPlayers) return reject(cmd.id, 'bad_request');
-        if (!seatsIn.includes(cmd.player_id)) return reject(cmd.id, 'not_a_seat');
-        if (new Set(seatsIn).size !== seatsIn.length) return reject(cmd.id, 'bad_request');
-        const known = new Set(store.players.map((p) => p.id));
-        if (!seatsIn.every((id) => known.has(id))) return reject(cmd.id, 'not_a_seat');
-        const online = new Set(store.onlinePlayerIds);
-        if (!seatsIn.every((id) => online.has(id))) return reject(cmd.id, 'player_offline');
-        const seats = shuffle(seatsIn);
+
+        const verdict = admitStartMatch({
+          seats: cmd.payload?.seats,
+          playerId: cmd.player_id,
+          knownPlayerIds: store.players.map((p) => p.id),
+          onlinePlayerIds: store.onlinePlayerIds,
+          activeMatch: Boolean(cache.current.match),
+          replace: cmd.payload?.replace === true,
+          minPlayers: meta.minPlayers,
+          maxPlayers: meta.maxPlayers,
+        });
+        if (!verdict.ok) return reject(cmd.id, verdict.reason);
+
+        // Shuffled so no player can pick their own seat or guarantee the first
+        // turn, even as the one who opened the sheet.
+        const seats = shuffle(verdict.seats);
         await createMatch(cmd, game, seats);
         return;
       }

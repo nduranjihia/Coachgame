@@ -18,6 +18,7 @@ const MESSAGES: Record<string, string> = {
   cannot_pass: 'You can only pass after drawing.',
   color_required: 'Pick a color for your wild card.',
   player_offline: 'Everyone needs to be connected first.',
+  match_in_progress: 'Someone else already started a game.',
   stale: 'That took too long. Try again.',
   match_over: 'That match has ended.',
   no_active_match: 'That match has ended.',

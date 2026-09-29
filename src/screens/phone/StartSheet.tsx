@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Check } from 'lucide-react';
 import Avatar from '@/components/Avatar';
 import Button from '@/components/Button';
+import ConfirmSheet from '@/components/ConfirmSheet';
 import Sheet from '@/components/Sheet';
 import { getGame } from '@/games/registry';
 import { useSession } from '@/store/session';
@@ -46,7 +47,15 @@ export default function StartSheet({ game, onClose, send, activeMatch }: StartSh
   const seats = me ? [me.id, ...picked] : [];
   const enough = isCards ? seats.length >= 2 : seats.length === 2;
   const canGo = Boolean(me) && enough && !busy;
-  const blocking = activeMatch;
+  // A match is already running. Starting another one ends it for everyone, so
+  // this never rides on a single tap: the button opens a confirm sheet, and
+  // only the confirmation sends `replace`.
+  const blocking = Boolean(activeMatch);
+  const [confirming, setConfirming] = useState(false);
+
+  useEffect(() => {
+    if (!game) setConfirming(false);
+  }, [game]);
 
   const toggle = (p: Player): void => {
     if (isCards) {
@@ -56,19 +65,28 @@ export default function StartSheet({ game, onClose, send, activeMatch }: StartSh
     }
   };
 
-  const go = async (): Promise<void> => {
+  const start = async (replace: boolean): Promise<void> => {
     if (!canGo) return;
     setBusy(true);
-    await send('start_match', { game, seats });
+    await send('start_match', { game, seats, replace });
     setBusy(false);
+    setConfirming(false);
     onClose();
+  };
+
+  const go = (): void => {
+    if (blocking) {
+      setConfirming(true);
+      return;
+    }
+    void start(false);
   };
 
   return (
     <Sheet open onClose={onClose} title={title}>
       {blocking ? (
         <p className="font-body mb-4 text-center text-[15px]" style={{ color: 'var(--sun)' }}>
-          This ends the match in progress.
+          A game is already running. Starting this one ends it for everyone.
         </p>
       ) : null}
 
@@ -151,13 +169,25 @@ export default function StartSheet({ game, onClose, send, activeMatch }: StartSh
       )}
 
       <div className="mt-5 flex flex-col gap-3">
-        <Button full disabled={!canGo} onClick={() => void go()}>
-          {busy ? 'One moment.' : "Let's go"}
+        <Button full variant={blocking ? 'danger' : 'primary'} disabled={!canGo} onClick={go}>
+          {busy ? 'One moment.' : blocking ? 'End it and play' : "Let's go"}
         </Button>
         <Button full variant="ghost" onClick={onClose} disabled={busy}>
           Not now
         </Button>
       </div>
+
+      <ConfirmSheet
+        open={confirming}
+        danger
+        title="End the running game?"
+        message={`Everyone is sent back to the menu, and ${meta.label} starts instead. No scores are kept for the game you stop.`}
+        confirmLabel="End it and play"
+        cancelLabel="Keep playing"
+        busy={busy}
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => void start(true)}
+      />
     </Sheet>
   );
 }

@@ -103,8 +103,10 @@ export default function PhoneApp() {
     if (routeCode) setLinkMode(false);
   }, [routeCode]);
 
-  // A household we belong to but with no face yet: recover through the code flow.
-  const recoveryCode = householdId && !myPlayerId ? (household?.join_code ?? null) : null;
+  // This device has a home but no player: a half-finished join that has to go
+  // back through the code flow before anything else is reachable.
+  const needsPlayer = Boolean(householdId) && !myPlayerId;
+  const recoveryCode = needsPlayer ? (household?.join_code ?? null) : null;
   const joinCode = pendingCode ?? routeCode ?? recoveryCode;
 
   const finishJoin = useCallback(() => {
@@ -188,6 +190,26 @@ export default function PhoneApp() {
         <div className="cc-skeleton h-10 w-56 rounded-full" />
         <Toast />
       </div>
+    );
+  }
+
+  // 4. Still no player of our own. The join screen above handles this by
+  // reading the code off the household, so reaching here means that code was
+  // unusable - the household loaded but we cannot rebuild a profile from it.
+  // Sending this device back to the code screen is the only way forward. Without
+  // it a device with no player reached the lobby as a ghost: `PhoneHome` treats
+  // a null `me` as "nobody", so it listed every real player as an opponent and
+  // offered a Remove button next to the player's own face.
+  if (needsPlayer) {
+    return (
+      <>
+        <EnterCode
+          onSubmit={(code) => {
+            setPendingCode(code);
+          }}
+        />
+        <Toast />
+      </>
     );
   }
 

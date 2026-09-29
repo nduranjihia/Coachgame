@@ -40,7 +40,9 @@ export default function PhoneHome({ send, onContinue }: PhoneHomeProps) {
   const [starting, setStarting] = useState<GameKey | null>(null);
 
   const onlineSet = useMemo(() => new Set(online), [online]);
-  const others = players.filter((p) => p.id !== me?.id);
+  // `me` is normally guaranteed by the screen above, but never treat a missing
+  // player as "not you": that would list your own row as an opponent.
+  const others = me ? players.filter((p) => p.id !== me.id) : [];
   const statusLine = others
     .map((p) => `${p.name} is ${onlineSet.has(p.id) ? 'online' : 'offline'}`)
     .join(' · ');
