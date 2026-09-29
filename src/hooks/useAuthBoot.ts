@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import type { Session, User } from '@supabase/supabase-js';
 
@@ -19,12 +19,13 @@ export function useAuthBoot(): AuthBoot {
   const [state, setState] = useState<AuthState>('booting');
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const started = useRef(false);
   const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
-    if (started.current) return;
-    started.current = true;
+    // No `started` latch: StrictMode mounts, unmounts and remounts every effect,
+    // and a ref set on the first run would make the second run bail out - the
+    // first run having been cancelled on unmount, nothing would ever set state
+    // and the app would sit on the boot skeleton forever.
     let cancelled = false;
 
     (async () => {

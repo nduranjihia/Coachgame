@@ -145,15 +145,23 @@ export function decideRole(s: RoleSignals): RoleDecision {
   return { role: 'phone', reason: 'default-phone', overrodeStored: false };
 }
 
+/** The decision for this page load. Resolved once, then left to `setRole`. */
+let resolvedRole: Role | null = null;
+
 /**
  * Whether this device is the TV or a controller.
  *
  * Runs at load, not on resize: a phone is never a TV and a TV is never a phone,
- * so a rotation or a window drag must not swap roles mid-game.
+ * so a rotation or a window drag must not swap roles mid-game. The answer is
+ * memoised for the page load, because `App` asks for it again after the router
+ * has already moved - a second resolution would re-persist the value and fight
+ * the `RoleRoute` that set the role for the screen actually being shown.
  */
 export function detectRole(): Role {
+  if (resolvedRole) return resolvedRole;
   const { role, reason, overrodeStored } = decideRole(readRoleSignals());
   setRole(role);
+  resolvedRole = role;
   if (overrodeStored || new URLSearchParams(window.location.search).has('debug')) {
     console.info(`[couch-clash] role=${role} (${reason})`);
   }

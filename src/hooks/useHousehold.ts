@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import { bindThenSubscribe, type ChannelBinder } from '@/lib/channel';
 import { setHouseholdId } from '@/lib/device';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/store/session';
@@ -13,18 +14,10 @@ export interface HouseholdHooks {
   onChannelStatus?: (status: string) => void;
   /**
    * Extra listeners for the shared channel, run inside `startChannel` *before*
-   * `subscribe()`.
-   *
-   * Supabase throws for `presence` and `postgres_changes` bindings added after
-   * the channel has joined or started joining, so these cannot be attached from
-   * an effect on the `channel` value - by the time a component sees it, the
-   * channel is already subscribed. They are declared here instead.
+   * `subscribe()`. See `bindThenSubscribe` for why this cannot be an effect.
    */
   bind?: ChannelBinder;
 }
-
-/** Attaches listeners to a channel that has not been subscribed to yet. */
-export type ChannelBinder = (channel: RealtimeChannel) => void;
 
 export interface HouseholdApi {
   /** Load household + players and (re)start the realtime subscriptions. */
@@ -119,35 +112,29 @@ export function useHousehold(role: 'tv' | 'phone', uid: string | null, hooks: Ho
       const next = supabase.channel(`hh:${id}`);
       const scope = `household_id=eq.${id}`;
 
-      // Order matters: everything is bound first, then one single `subscribe()`.
-      try {
-        bindRef.current?.(next);
-        next.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'households', filter: scope }, () => {
-          void refetch();
-        });
-        next.on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'players', filter: scope },
-          () => {
+      bindThenSubscribe(
+        next,
+        bindRef.current,
+        (ch) => {
+          ch.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'households', filter: scope }, () => {
+            void refetch();
+          });
+          ch.on('postgres_changes', { event: '*', schema: 'public', table: 'players', filter: scope }, () => {
             void fetchPlayers(id);
-          },
-        );
-        next.on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: scope }, () => {
-          void matchEventRef.current?.();
-        });
-      } catch (cause) {
-        // A binder that throws must not take the whole screen down with it.
-        console.error('[couch-clash] channel binding failed', cause);
-      }
-
-      next.subscribe((status) => {
-        statusRef.current?.(status);
-        if (status === 'SUBSCRIBED') {
-          // Safety net: refetch everything after every (re)connect.
-          void refetch();
-          void matchEventRef.current?.();
-        }
-      });
+          });
+          ch.on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: scope }, () => {
+            void matchEventRef.current?.();
+          });
+        },
+        (status) => {
+          statusRef.current?.(status);
+          if (status === 'SUBSCRIBED') {
+            // Safety net: refetch everything after every (re)connect.
+            void refetch();
+            void matchEventRef.current?.();
+          }
+        },
+      );
       channelRef.current = next;
       setChannel(next);
     },

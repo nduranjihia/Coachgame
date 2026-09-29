@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { useSession } from '@/store/session';
-import type { ChannelBinder } from './useHousehold';
+import type { ChannelBinder } from '@/lib/channel';
 
 export interface PresenceOptions {
   role: 'tv' | 'phone';

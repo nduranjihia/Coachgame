@@ -6,7 +6,7 @@ import { useSession } from '@/store/session';
 import { getEngine, getGame, isGameKey } from '@/games/registry';
 import type { Command, GameKey, Match } from '@/types/db';
 import type { Card, CardsSecrets } from '@/types/games';
-import type { ChannelBinder } from './useHousehold';
+import type { ChannelBinder } from '@/lib/channel';
 
 const COMMAND_COLUMNS =
   'id, household_id, player_id, match_id, type, payload, status, reason, created_at';
