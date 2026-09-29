@@ -1,0 +1,272 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-0: #14101F;
+  --bg-1: #1E1730;
+  --bg-2: #2A2142;
+  --bg-3: #382C58;
+  --ink: #FFF6E9;
+  --ink-dim: #B9AED0;
+  --line: rgba(255, 246, 233, 0.12);
+  --coral: #FF6B6B;
+  --sun: #FFC857;
+  --mint: #3DDC97;
+  --sky: #4DB8FF;
+  --grape: #A78BFA;
+  --rose: #FF7EB6;
+  --card-red: #FF5A5F;
+  --card-yellow: #FFC83D;
+  --card-green: #34D399;
+  --card-blue: #4DA3FF;
+  --danger: #FF4D4D;
+  --ok: #3DDC97;
+  --radius-sm: 14px;
+  --radius: 22px;
+  --radius-lg: 32px;
+  --shadow-hard: 0 6px 0 rgba(0, 0, 0, 0.35);
+  --shadow-soft: 0 18px 40px rgba(0, 0, 0, 0.35);
+  --glow:
+    radial-gradient(60vmax 60vmax at 15% -10%, rgba(255, 200, 87, 0.16), transparent 60%),
+    radial-gradient(50vmax 50vmax at 100% 110%, rgba(167, 139, 250, 0.18), transparent 60%);
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html {
+  font-size: 16px;
+}
+
+/* TV root: 1rem === 2vh so TV layouts can be written entirely in rem. */
+html.cc-tv {
+  font-size: 2vh;
+  background: var(--bg-0);
+}
+
+html.cc-tv,
+html.cc-tv body {
+  overflow: hidden;
+  height: 100%;
+  touch-action: none;
+}
+
+html.cc-tv body {
+  cursor: none;
+}
+
+body {
+  margin: 0;
+  background: var(--glow), var(--bg-0);
+  background-attachment: fixed;
+  color: var(--ink);
+  font-family: 'Fredoka', ui-rounded, system-ui, sans-serif;
+  font-weight: 500;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior: none;
+}
+
+#root {
+  isolation: isolate;
+}
+
+/* Phone root ------------------------------------------------------- */
+.cc-phone-root {
+  height: 100dvh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  overscroll-behavior: none;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .cc-bg-drift {
+    animation: ccDrift 40s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes ccDrift {
+  0% {
+    background-position: 0% 0%, 0% 0%, 0 0;
+  }
+  100% {
+    background-position: 6% 4%, -5% -6%, 0 0;
+  }
+}
+
+/* Type helpers ------------------------------------------------------ */
+.font-display {
+  font-family: 'Lilita One', 'Fredoka', ui-rounded, system-ui, sans-serif;
+  font-weight: 400;
+}
+
+.font-body {
+  font-family: 'Fredoka', ui-rounded, system-ui, sans-serif;
+}
+
+.code-text {
+  font-family: 'Lilita One', 'Fredoka', ui-rounded, system-ui, sans-serif;
+  letter-spacing: 0.18em;
+}
+
+/* Components -------------------------------------------------------- */
+.cc-btn {
+  font-family: 'Lilita One', 'Fredoka', ui-rounded, system-ui, sans-serif;
+  min-height: 56px;
+  padding: 0 28px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 22px;
+  line-height: 1;
+  border: 3px solid rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-hard);
+  transition:
+    transform 120ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 120ms ease,
+    opacity 120ms ease;
+  cursor: pointer;
+  user-select: none;
+}
+
+.cc-btn:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+
+.cc-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cc-btn-primary {
+  background: var(--sun);
+  color: var(--bg-0);
+}
+
+.cc-btn-secondary {
+  background: var(--bg-3);
+  color: var(--ink);
+}
+
+.cc-btn-danger {
+  background: var(--danger);
+  color: var(--bg-0);
+}
+
+.cc-btn-ghost {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--line);
+  box-shadow: none;
+}
+
+.cc-btn-ghost:active:not(:disabled) {
+  box-shadow: none;
+}
+
+.cc-panel {
+  background: var(--bg-2);
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-soft);
+}
+
+.cc-skeleton {
+  background: linear-gradient(100deg, var(--bg-2) 30%, var(--bg-3) 50%, var(--bg-2) 70%);
+  background-size: 220% 100%;
+  animation: ccShimmer 1.4s linear infinite;
+}
+
+@keyframes ccShimmer {
+  0% {
+    background-position: 140% 0;
+  }
+  100% {
+    background-position: -40% 0;
+  }
+}
+
+/* TV specific -------------------------------------------------------- */
+.cc-tv-root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+  padding: 3vh 3.5vw;
+  cursor: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.cc-tv-root * {
+  cursor: none;
+}
+
+.cc-tv-tap {
+  min-height: 0;
+  pointer-events: none;
+}
+
+.cc-hidden-cursor {
+  cursor: none !important;
+}
+
+/* Confetti canvas sits above the background glow. */
+.cc-confetti {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 60;
+}
+
+.cc-scroll-x {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.cc-scroll-x::-webkit-scrollbar {
+  display: none;
+}
+
+.cc-scroll-y {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+/* Reduced motion ----------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .cc-bg-drift {
+    animation: none !important;
+  }
+}
