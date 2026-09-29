@@ -188,10 +188,12 @@ export function useHousehold(role: 'tv' | 'phone', uid: string | null, hooks: Ho
   }, [bootstrap]);
 
   useEffect(() => {
-    if (bootstrapped.current) return;
+    // `uid` arrives one effect tick after the role subtree mounts (App's auth
+    // boot runs after its children), so only bootstrap once it is available.
+    if (bootstrapped.current || !uid) return;
     bootstrapped.current = true;
     void bootstrap();
-  }, [bootstrap]);
+  }, [bootstrap, uid]);
 
   useEffect(
     () => () => {
