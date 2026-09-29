@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef } from 'react';
-import type { RealtimeChannel } from '@supabase/supabase-js';
+import type { ChannelBinder } from '@/lib/channel';
 import { supabase } from '@/lib/supabase';
 import { useMatchStore } from '@/store/match';
 import type { Card } from '@/types/games';
 
 export interface MyHandOptions {
-  channel: RealtimeChannel | null;
   householdId: string | null;
   matchId: string | null;
   playerId: string | null;
@@ -13,6 +12,8 @@ export interface MyHandOptions {
 }
 
 export interface MyHandApi {
+  /** A channel binder for the `hands` table. See `bindThenSubscribe`. */
+  bind: ChannelBinder;
   reload: () => Promise<void>;
   clear: () => void;
 }
@@ -22,7 +23,7 @@ export interface MyHandApi {
  * see anyone else's. Realtime is a convenience; the refetch after every match
  * update is the mechanism that always runs.
  */
-export function useMyHand({ channel, householdId, matchId, playerId, ready }: MyHandOptions): MyHandApi {
+export function useMyHand({ householdId, matchId, playerId, ready }: MyHandOptions): MyHandApi {
   const setHandLoading = useMatchStore((s) => s.setHandLoading);
   const mounted = useRef(true);
 
@@ -65,22 +66,27 @@ export function useMyHand({ channel, householdId, matchId, playerId, ready }: My
   }, [clear, matchId, playerId, ready, reload, setHandLoading]);
 
   useEffect(() => {
-    if (!ready || !channel || !householdId) return undefined;
-    const filter = `household_id=eq.${householdId}`;
-    const onChange = (): void => {
-      void reload();
-    };
-    channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hands', filter }, onChange);
-    channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hands', filter }, onChange);
-
     const onVisible = (): void => {
       if (document.visibilityState === 'visible') void reload();
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [channel, householdId, ready, reload]);
+  }, [reload]);
 
-  return { reload, clear };
+  const bind = useCallback<ChannelBinder>(
+    (channel) => {
+      if (!householdId) return;
+      const filter = `household_id=eq.${householdId}`;
+      const onChange = (): void => {
+        void reload();
+      };
+      channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hands', filter }, onChange);
+      channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hands', filter }, onChange);
+    },
+    [householdId, reload],
+  );
+
+  return { bind, reload, clear };
 }
 
 export default useMyHand;

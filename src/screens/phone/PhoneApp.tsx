@@ -61,32 +61,36 @@ export default function PhoneApp() {
   const stats = useStats(householdId);
   const onMatchEvent = useCallback(() => void match.reload(), [match]);
 
-  // Declared before the channel exists so `useHousehold` can apply them to the
-  // fresh channel before it calls `subscribe()`.
+  // Every channel listener is declared before the channel exists, so
+  // `useHousehold` can apply them to the fresh channel immediately before it
+  // calls `subscribe()`. Attaching them from an effect on `channel` is always
+  // too late and Supabase throws.
   const bindPresence = usePresence({ role: 'phone', uid });
-  const bind = useCallback((channel: RealtimeChannel) => bindPresence(channel), [bindPresence]);
-
-  const { channel, bootstrap } = useHousehold('phone', uid, { onMatchEvent, bind });
-  const ready = Boolean(householdId && channel);
-
-  useMyHand({
-    channel,
+  const bindHand = useMyHand({
     householdId,
     matchId: activeMatch?.id ?? null,
     playerId: myPlayerId,
-    ready,
+    ready: Boolean(householdId),
   });
-
-  // A phone learns the TV answered because the match rows moved.
   const answerKey = `${activeMatch?.id ?? ''}:${activeMatch?.version ?? ''}:${lastMatch?.id ?? ''}`;
-  const { send } = useSendCommand({
+  const command = useSendCommand({
     householdId,
     playerId: myPlayerId,
-    channel,
     activeMatchId: activeMatch?.id ?? null,
     answerKey,
-    ready,
+    ready: Boolean(householdId),
   });
+  const bind = useCallback(
+    (channel: RealtimeChannel) => {
+      bindPresence(channel);
+      bindHand.bind(channel);
+      command.bind(channel);
+    },
+    [bindHand, bindPresence, command],
+  );
+
+  const { bootstrap } = useHousehold('phone', uid, { onMatchEvent, bind });
+  const { send } = command;
 
   const [linkMode, setLinkMode] = useState(false);
   const [pendingCode, setPendingCode] = useState<string | null>(null);

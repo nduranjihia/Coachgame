@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import type { RealtimeChannel } from '@supabase/supabase-js';
+import type { ChannelBinder } from '@/lib/channel';
 import { COMMAND_TIMEOUT_MS } from '@/lib/constants';
 import { friendlyMessage, FALLBACK_MESSAGE, TV_OFFLINE_MESSAGE } from '@/lib/errors';
 import { hapticReject } from '@/lib/haptics';
@@ -10,7 +10,6 @@ import type { CommandType } from '@/types/db';
 export interface SendCommandOptions {
   householdId: string | null;
   playerId: string | null;
-  channel: RealtimeChannel | null;
   /** Id of the active match, or `null` for `start_match`. */
   activeMatchId: string | null;
   /**
@@ -22,6 +21,8 @@ export interface SendCommandOptions {
 }
 
 export interface SendCommandApi {
+  /** A channel binder for the `commands` table. See `bindThenSubscribe`. */
+  bind: ChannelBinder;
   send: (type: CommandType, payload?: Record<string, any>, matchId?: string | null) => Promise<boolean>;
   hasPending: () => boolean;
 }
@@ -34,7 +35,6 @@ export interface SendCommandApi {
 export function useSendCommand({
   householdId,
   playerId,
-  channel,
   activeMatchId,
   answerKey,
   ready,
@@ -69,26 +69,30 @@ export function useSendCommand({
     for (const id of Array.from(pending.current)) forget(id);
   }, [answerKey, forget, ready]);
 
-  useEffect(() => {
-    if (!ready || !channel || !householdId) return undefined;
-    const filter = `household_id=eq.${householdId}`;
-    const onUpdate = (payload: {
-      new: { id: number; player_id: string; status: string; reason: string | null };
-    }): void => {
-      const row = payload?.new;
-      if (!row || row.player_id !== playerId) return;
-      if (row.status === 'rejected') {
-        pushToast(friendlyMessage(row.reason), 'error');
-        hapticReject();
-        forget(row.id);
-      } else if (row.status === 'accepted') {
-        forget(row.id);
-      }
-    };
-    // The channel is owned by `useHousehold`; we only attach listeners to it.
-    channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'commands', filter }, onUpdate);
-    return undefined;
-  }, [channel, forget, householdId, playerId, pushToast, ready]);
+  // A command row turning accepted or rejected is the phone's answer. Bound
+  // before the channel subscribes, because `postgres_changes` cannot be added
+  // to a channel that has already joined.
+  const bind = useCallback<ChannelBinder>(
+    (channel) => {
+      if (!householdId) return;
+      const filter = `household_id=eq.${householdId}`;
+      const onUpdate = (payload: {
+        new: { id: number; player_id: string; status: string; reason: string | null };
+      }): void => {
+        const row = payload?.new;
+        if (!row || row.player_id !== playerId) return;
+        if (row.status === 'rejected') {
+          pushToast(friendlyMessage(row.reason), 'error');
+          hapticReject();
+          forget(row.id);
+        } else if (row.status === 'accepted') {
+          forget(row.id);
+        }
+      };
+      channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'commands', filter }, onUpdate);
+    },
+    [forget, householdId, playerId, pushToast],
+  );
 
   const send = useCallback(
     async (type: CommandType, payload: Record<string, any> = {}, matchId?: string | null): Promise<boolean> => {
@@ -127,7 +131,7 @@ export function useSendCommand({
     [activeMatchId, householdId, playerId, pushToast],
   );
 
-  return { send, hasPending: () => pending.current.size > 0 };
+  return { bind, send, hasPending: () => pending.current.size > 0 };
 }
 
 export default useSendCommand;
