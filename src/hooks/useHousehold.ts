@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { bindThenSubscribe, type ChannelBinder } from '@/lib/channel';
-import { setHouseholdId } from '@/lib/device';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/store/session';
 import type { Household, Player } from '@/types/db';
@@ -45,6 +44,7 @@ function settingsOrDefaults(raw: unknown): Household['settings'] {
 export function useHousehold(role: 'tv' | 'phone', uid: string | null, hooks: HouseholdHooks = {}): HouseholdApi {
   const householdId = useSession((s) => s.householdId);
   const setHousehold = useSession((s) => s.setHousehold);
+  const setHouseholdId = useSession((s) => s.setHouseholdId);
   const setPlayers = useSession((s) => s.setPlayers);
   const setLoading = useSession((s) => s.setLoading);
   const markHomeGone = useSession((s) => s.markHomeGone);
@@ -155,7 +155,6 @@ export function useHousehold(role: 'tv' | 'phone', uid: string | null, hooks: Ho
         if (!ok) {
           setHouseholdId(null);
           id = null;
-          useSession.setState({ householdId: null });
         }
       }
 
@@ -168,7 +167,6 @@ export function useHousehold(role: 'tv' | 'phone', uid: string | null, hooks: Ho
         }
         const created = (Array.isArray(data) ? data[0] : data) as Household;
         setHouseholdId(created.id);
-        useSession.setState({ householdId: created.id });
         id = created.id;
       }
 
@@ -195,7 +193,7 @@ export function useHousehold(role: 'tv' | 'phone', uid: string | null, hooks: Ho
     } finally {
       setLoading(false);
     }
-  }, [fetchPlayers, role, setHousehold, setLoading, startChannel, uid, verify]);
+  }, [fetchPlayers, role, setHousehold, setHouseholdId, setLoading, startChannel, uid, verify]);
 
   const reload = useCallback(async () => {
     if (channelRef.current) {

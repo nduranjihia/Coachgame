@@ -2,7 +2,14 @@ import { create } from 'zustand';
 import type { Household, Player, PlayerColor } from '@/types/db';
 import { DEFAULT_SETTINGS } from '@/types/db';
 import type { Role } from '@/lib/device';
-import { getHouseholdId, getPlayerId, getRole, setHouseholdId, setPlayerId, setRole } from '@/lib/device';
+import {
+  getHouseholdId,
+  getPlayerId,
+  getRole,
+  setHouseholdId as setHouseholdIdInStorage,
+  setPlayerId,
+  setRole,
+} from '@/lib/device';
 import { useMatchStore } from './match';
 
 export type SessionPhase =
@@ -33,6 +40,14 @@ interface SessionState {
   init: (role: Role, uid: string) => void;
   setPhase: (phase: SessionPhase) => void;
   setLoading: (loading: boolean) => void;
+  /**
+   * Point this device at a home, in localStorage *and* in the store.
+   *
+   * Both halves matter: `bootstrap` reads `householdId` back out of the store,
+   * so writing only localStorage leaves the store stale and the very next
+   * `bootstrap()` bails as if this device had no home at all.
+   */
+  setHouseholdId: (householdId: string | null) => void;
   setHousehold: (household: Household | null) => void;
   setPlayers: (players: Player[]) => void;
   setPresence: (onlinePlayerIds: string[], tvOnline: boolean) => void;
@@ -73,6 +88,11 @@ export const useSession = create<SessionState>((set, get) => ({
 
   setLoading: (loading) => set({ loading }),
 
+  setHouseholdId: (householdId) => {
+    setHouseholdIdInStorage(householdId);
+    set({ householdId });
+  },
+
   setHousehold: (household) =>
     set({ household, householdId: household ? household.id : null, homeGone: false }),
 
@@ -93,7 +113,7 @@ export const useSession = create<SessionState>((set, get) => ({
   },
 
   resetIdentity: () => {
-    setHouseholdId(null);
+    setHouseholdIdInStorage(null);
     setPlayerId(null);
     set({
       householdId: null,

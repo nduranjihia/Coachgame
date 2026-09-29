@@ -4,7 +4,7 @@ import Button from '@/components/Button';
 import Sheet from '@/components/Sheet';
 import StatusBar from '@/components/StatusBar';
 import { friendlyMessage } from '@/lib/errors';
-import { getHouseholdId, getPlayerId, setHouseholdId } from '@/lib/device';
+import { getHouseholdId, getPlayerId } from '@/lib/device';
 import { rpcErrorCode, supabase } from '@/lib/supabase';
 import { useSession } from '@/store/session';
 import type { HouseholdPreview, Player, PreviewPlayer } from '@/types/db';
@@ -108,6 +108,7 @@ function WhoScreen({
 export default function JoinFlow({ code, onDone, onCancel }: JoinFlowProps) {
   const tvOnline = useSession((s) => s.tvOnline);
   const setMyPlayerId = useSession((s) => s.setMyPlayerId);
+  const setHouseholdIdInStore = useSession((s) => s.setHouseholdId);
 
   const [stage, setStage] = useState<Stage>('preview');
   const [preview, setPreview] = useState<HouseholdPreview | null>(null);
@@ -148,7 +149,10 @@ export default function JoinFlow({ code, onDone, onCancel }: JoinFlowProps) {
   }, [previewHousehold]);
 
   const adopt = (player: Player, householdId: string): void => {
-    setHouseholdId(householdId);
+    // The store action, not the `device` helper: `bootstrap()` reads
+    // `householdId` back out of the store, so writing only localStorage left it
+    // null and the join bounced straight back to the code entry screen.
+    setHouseholdIdInStore(householdId);
     setMyPlayerId(player.id);
     onDone();
   };
