@@ -17,6 +17,8 @@ export interface RecentMatch {
   winner_id: string | null;
   result: string | null;
   finished_at: string | null;
+  /** Included for chess so `matchSummary` can count real moves. */
+  state?: { san?: string[]; moveCount?: number } | null;
 }
 
 export interface StatsApi {
@@ -34,7 +36,10 @@ function emptyByGame(): StatsByGame {
   return out;
 }
 
-const MATCH_COLUMNS = 'id, game, seats, winner_id, result, finished_at';
+// `state` is read only for its move list (`san`) and move count; the match
+// summary line "Checkmate in 23 moves" would otherwise always say 1, because
+// `matchSummary` computes from `state.san` and a missing state counts as 0.
+const MATCH_COLUMNS = 'id, game, seats, winner_id, result, finished_at, state';
 
 /** Section 10.4: stats are computed on the client from the last 500 finished matches. */
 export function useStats(householdId: string | null): StatsApi {
@@ -100,11 +105,26 @@ export function useStats(householdId: string | null): StatsApi {
 export function headToHead(stats: GameStats | undefined, players: Player[]): string {
   if (!stats || stats.total === 0) return 'No matches yet';
   const parts: string[] = [];
+  const seen = new Set<string>();
   const known = players.slice(0, 4);
   for (const p of known) {
     const n = stats.wins[p.id] ?? 0;
-    if (n > 0) parts.push(`${p.name} ${n}`);
+    if (n > 0) {
+      parts.push(`${p.name} ${n}`);
+      seen.add(p.id);
+    }
   }
+  // Wins by a player whose row has since been removed still happened. The spec
+  // names them "Former player"; dropping them made the record drift below the
+  // number of finished matches and hid a roommate's wins forever.
+  let formerWins = 0;
+  for (const [id, n] of Object.entries(stats.wins)) {
+    if (n > 0 && !seen.has(id)) {
+      formerWins += n;
+      seen.add(id);
+    }
+  }
+  if (formerWins > 0) parts.push(`Former player${formerWins === 1 ? '' : 's'} ${formerWins}`);
   if (parts.length === 0) parts.push(stats.draws > 0 ? 'Draws only' : 'No wins yet');
   if (stats.draws > 0 && parts[0] !== 'Draws only') parts.push(`Draws ${stats.draws}`);
   return parts.join(' · ');

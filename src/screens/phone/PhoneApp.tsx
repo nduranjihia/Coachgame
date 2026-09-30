@@ -223,8 +223,13 @@ export default function PhoneApp() {
     );
   }
 
-  // 5. The result overlay.
-  if (!activeMatch && iPlayedLast && lastMatch) {
+  // 5. The result overlay. `iWantResults` also requires the user to still be on
+  // the Home tab: without that, "Back to menu" calls setTab('home') while this
+  // same render condition still routes to PhoneResult - the button re-renders
+  // the exact screen it was supposed to leave, and the only escape was a new
+  // match starting. Switching to Stats or Settings must always win.
+  const iWantResults = !activeMatch && iPlayedLast && lastMatch && tab === 'home';
+  if (iWantResults && lastMatch) {
     return (
       <>
         <PhoneResult

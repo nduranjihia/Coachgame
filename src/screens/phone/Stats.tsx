@@ -69,6 +69,11 @@ export default function Stats() {
   const winners = players
     .map((p) => ({ player: p, wins: stats.wins[p.id] ?? 0 }))
     .filter((row) => row.wins > 0);
+  // Wins by players whose rows were removed still belong in the bar: the widths
+  // are fractions of `total`, so leaving them out left the bar under-filled.
+  const formerWins = Object.entries(stats.wins)
+    .filter(([id, n]) => n > 0 && !players.some((p) => p.id === id))
+    .reduce((sum, [, n]) => sum + n, 0);
 
   return (
     <div className="cc-phone-root">
@@ -142,7 +147,11 @@ export default function Stats() {
                     background: `var(--${row.player.color})`,
                   }}
                 />
-              ))}
+              ))}              {formerWins > 0 ? (
+                <span
+                  style={{ width: `${(formerWins / total) * 100}%`, background: 'rgba(185,174,208,.55)' }}
+                />
+              ) : null}
               {stats.draws > 0 ? (
                 <span
                   style={{ width: `${(stats.draws / total) * 100}%`, background: 'rgba(185,174,208,.35)' }}
@@ -158,7 +167,13 @@ export default function Stats() {
                   />
                   {row.player.name} {row.wins}
                 </span>
-              ))}
+              ))
+              }
+              {formerWins > 0 ? (
+                <span style={{ color: 'var(--ink-dim)' }}>
+                  Former players {formerWins}
+                </span>
+              ) : null}
               {stats.draws > 0 ? (
                 <span style={{ color: 'var(--ink-dim)' }}>Draws {stats.draws}</span>
               ) : null}

@@ -45,6 +45,8 @@ export function useCommandProcessor({
   const running = useRef(false);
   const queued = useRef(false);
   const cache = useRef<Cache>(emptyCache());
+  /** The mount-time cache load. Early commands wait for it before touching the cache. */
+  const initialLoad = useRef<Promise<void>>(Promise.resolve());
   const committed = useRef(onCommitted);
   committed.current = onCommitted;
 
@@ -218,6 +220,16 @@ export function useCommandProcessor({
         return;
       }
 
+      // 2. Match-context commands wait for the initial cache load, so a command
+      // queued while the TV was (re)mounting sees the real active match. If that
+      // load fails, leave the command pending: the next drain retries it, which
+      // beats throwing out of the drain loop and rejecting a good command.
+      try {
+        await initialLoad.current;
+      } catch {
+        return;
+      }
+
       if (cmd.type === 'start_match') {
         const game = cmd.payload?.game as GameKey;
         if (!isGameKey(game)) return reject(cmd.id, 'bad_request');
@@ -328,10 +340,14 @@ export function useCommandProcessor({
     void drain();
   }, [drain]);
 
-  // Load the cached context once when the household becomes known.
+  // Load the cached context once when the household becomes known. The promise
+  // is kept so a command that arrives before it settles can wait for it: the
+  // first drain used to run against an empty cache, so a pending `start_match`
+  // saw `activeMatch: false` and abandoned a live match it was meant to refuse,
+  // and a queued `move` was rejected `no_active_match`.
   useEffect(() => {
     if (!householdId) return;
-    void reloadCache();
+    initialLoad.current = reloadCache();
   }, [householdId, reloadCache]);
 
   // The 5 second poll safety net: it also covers a TV whose socket never

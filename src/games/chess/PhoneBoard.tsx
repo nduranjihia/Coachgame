@@ -168,8 +168,13 @@ export default function ChessPhoneBoard({
   const handleSquare = (square: Square, piece: string | undefined): void => {
     if (!myTurn) return;
     if (selected && legalTargets.includes(square)) {
-      const onSquare = chess.get(square as never);
-      if (onSquare?.type === 'p') {
+      // The moving piece is the one we selected, not whatever stands on the
+      // destination. The old check read `chess.get(square)` - the arrival
+      // square - so a promotion move into an empty last-rank square (the usual
+      // case) never saw a pawn there, never opened the sheet, and silently sent
+      // a queen. Reading the selected square is what makes the sheet appear.
+      const moving = selected ? chess.get(selected as never) : undefined;
+      if (moving?.type === 'p') {
         const rank = square[1];
         const promoting = (myColour === 'w' && rank === '8') || (myColour === 'b' && rank === '1');
         if (promoting) {
