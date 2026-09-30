@@ -37,6 +37,10 @@ function ChessExtras({
   const offerFrom = state.drawOfferFrom;
   const waitingOnMe = Boolean(offerFrom && offerFrom !== me?.id);
   const offeredByName = offerFrom ? (players.find((p) => p.id === offerFrom)?.name ?? 'Someone') : '';
+  // The engine rejects a second offer while one is open (`bad_request`), so
+  // offering again with our own offer pending can only ever come back as a
+  // rejection toast. Disable it instead, and say why.
+  const myOfferPending = Boolean(offerFrom && offerFrom === me?.id);
 
   return (
     <>
@@ -44,10 +48,10 @@ function ChessExtras({
         <Button
           full
           variant="secondary"
-          disabled={disabled || waitingOnMe}
+          disabled={disabled || offerFrom != null}
           onClick={() => void send('offer_draw', {}, match.id)}
         >
-          Offer draw
+          {myOfferPending ? 'Draw offered…' : 'Offer draw'}
         </Button>
         <Button
           full
@@ -105,6 +109,10 @@ export default function PhoneMatch({ match, send }: PhoneMatchProps) {
   const View = meta.PhoneView;
   const disabled = !tvOnline;
   const myIndex = me ? match.seats.indexOf(me.id) : -1;
+  // Same guaranteed-reject guard as ChessExtras: with any offer open, another
+  // `offer_draw` is always rejected, so the ⋯ menu button waits too.
+  const chessOfferPending =
+    match.game === 'chess' ? (match.state as ChessState).drawOfferFrom != null : false;
 
   const body = (() => {
     if (match.game === 'tictactoe') {
@@ -205,7 +213,7 @@ export default function PhoneMatch({ match, send }: PhoneMatchProps) {
               <Button
                 full
                 variant="secondary"
-                disabled={disabled}
+                disabled={disabled || chessOfferPending}
                 onClick={() => {
                   setMenu(false);
                   void send('offer_draw', {}, match.id);

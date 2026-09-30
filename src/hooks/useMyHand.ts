@@ -53,6 +53,14 @@ export function useMyHand({ householdId, matchId, playerId, ready }: MyHandOptio
     useMatchStore.getState().setMyHand([]);
   }, []);
 
+  // The channel is subscribed once per household, so a listener registered on
+  // it keeps the closure it was born with. A listener that captured `reload`
+  // directly would refetch whichever match existed at subscribe time - usually
+  // none - and blank the hand every time a realtime event arrived mid-game.
+  // Going through a ref keeps the listener pointed at the latest match.
+  const reloadRef = useRef(reload);
+  reloadRef.current = reload;
+
   useEffect(() => {
     if (!ready || !matchId || !playerId) {
       clear();
@@ -78,12 +86,18 @@ export function useMyHand({ householdId, matchId, playerId, ready }: MyHandOptio
       if (!householdId) return;
       const filter = `household_id=eq.${householdId}`;
       const onChange = (): void => {
-        void reload();
+        void reloadRef.current();
       };
       channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hands', filter }, onChange);
       channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hands', filter }, onChange);
+      // Spec 8.1 safety net: after every matches INSERT/UPDATE the phone
+      // refetches its own hand row. Realtime hands events are a convenience
+      // (RLS makes them sparse); the match event is the mechanism that always
+      // runs when the TV commits a turn.
+      channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'matches', filter }, onChange);
+      channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'matches', filter }, onChange);
     },
-    [householdId, reload],
+    [householdId],
   );
 
   return { bind, reload, clear };
